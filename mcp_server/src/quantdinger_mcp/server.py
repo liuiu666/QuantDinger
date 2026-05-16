@@ -196,6 +196,34 @@ def submit_backtest(
         idempotency_key: optional; repeat calls with the same key return the
                          original job instead of submitting a duplicate.
     """
+    import re
+    risk_cfg = {}
+    pos_cfg = {}
+    
+    # Extract config from comments, e.g. # @strategy stopLossPct 0.02
+    for match in re.finditer(r"#\s*@strategy\s+([a-zA-Z0-9_]+)\s+([0-9a-zA-Z._-]+)", code):
+        key = match.group(1)
+        val_str = match.group(2)
+        if val_str.lower() == "true":
+            val = True
+        elif val_str.lower() == "false":
+            val = False
+        elif "." in val_str:
+            try:
+                val = float(val_str)
+            except ValueError:
+                val = val_str
+        else:
+            try:
+                val = int(val_str)
+            except ValueError:
+                val = val_str
+                
+        if key in ("stopLossPct", "takeProfitPct"):
+            risk_cfg[key] = val
+        elif key in ("entryPct",):
+            pos_cfg[key] = val
+
     payload = {
         "code": code,
         "market": market,
@@ -209,6 +237,13 @@ def submit_backtest(
         "leverage": leverage,
         "trade_direction": trade_direction,
     }
+    
+    if risk_cfg or pos_cfg:
+        payload["strategy_config"] = {
+            "risk": risk_cfg,
+            "position": pos_cfg
+        }
+
     headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
     return _post("/api/agent/v1/backtests", json=payload, headers=headers)
 
