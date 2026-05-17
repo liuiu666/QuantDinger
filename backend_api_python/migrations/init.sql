@@ -1219,6 +1219,17 @@ CREATE TABLE IF NOT EXISTS qd_orderbook_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_orderbook_snapshots_symbol_time ON qd_orderbook_snapshots(symbol, snapshot_time DESC);
 
+-- 31.3b 订单簿最优报价 (bookTicker — best bid/ask from WebSocket)
+CREATE TABLE IF NOT EXISTS qd_orderbook_ticker (
+    symbol VARCHAR(20) PRIMARY KEY,
+    bid_price DECIMAL(24,12) NOT NULL,
+    bid_qty DECIMAL(24,12) NOT NULL,
+    ask_price DECIMAL(24,12) NOT NULL,
+    ask_qty DECIMAL(24,12) NOT NULL,
+    update_time BIGINT NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- 31.4 资金费率历史
 CREATE TABLE IF NOT EXISTS qd_funding_rates (
     id BIGSERIAL,

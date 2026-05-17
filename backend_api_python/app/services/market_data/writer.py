@@ -98,6 +98,7 @@ class BatchWriter:
         trades = []
         funding = []
         depth = []
+        booktickers = []
 
         count = 0
         while self._queue and count < self._batch_size:
@@ -115,6 +116,8 @@ class BatchWriter:
                 funding.append((symbol, data))
             elif msg_type == "depth":
                 depth.append((symbol, data))
+            elif msg_type == "bookTicker":
+                booktickers.append((symbol, data))
 
         if not count:
             return
@@ -170,5 +173,14 @@ class BatchWriter:
                 self._total_written += len(depth)
             except Exception as e:
                 logger.warning(f"BatchWriter depth write error: {e}")
+
+        # Write book ticker (best bid/ask — upsert per symbol)
+        if booktickers:
+            try:
+                for symbol, data in booktickers:
+                    service.store_book_ticker(symbol, data)
+                self._total_written += len(booktickers)
+            except Exception as e:
+                logger.warning(f"BatchWriter bookTicker write error: {e}")
 
         self._total_batches += 1

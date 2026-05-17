@@ -232,6 +232,28 @@ class MarketDataService:
             logger.warning(f"MarketDataService.get_latest_orderbook error: {e}")
             return None
 
+    def store_book_ticker(self, symbol: str, data: dict) -> None:
+        """Store best bid/ask ticker from WebSocket (upsert, one row per symbol)."""
+        try:
+            from app.utils.db_postgres import execute_sql
+            execute_sql(
+                "INSERT INTO qd_orderbook_ticker "
+                "(symbol, bid_price, bid_qty, ask_price, ask_qty, update_time) "
+                "VALUES (%s, %s, %s, %s, %s, %s) "
+                "ON CONFLICT (symbol) DO UPDATE SET "
+                "bid_price = EXCLUDED.bid_price, bid_qty = EXCLUDED.bid_qty, "
+                "ask_price = EXCLUDED.ask_price, ask_qty = EXCLUDED.ask_qty, "
+                "update_time = EXCLUDED.update_time, updated_at = NOW()",
+                (
+                    self.orderbook_repo._normalize_symbol(symbol),
+                    data.get("bid_price", 0), data.get("bid_qty", 0),
+                    data.get("ask_price", 0), data.get("ask_qty", 0),
+                    data.get("update_time", 0),
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"MarketDataService.store_book_ticker error: {e}")
+
     # ── Funding Rate ────────────────────────────────────────────────────
 
     def get_funding_rate_history(

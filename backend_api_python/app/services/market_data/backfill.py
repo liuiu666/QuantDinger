@@ -114,7 +114,8 @@ class BackfillService:
         data_type = job["data_type"]
         symbol = job["symbol"]
         timeframe = job.get("timeframe", "1m")
-        cursor = job.get("current_cursor", 0) or job["start_time"]
+        current_cursor = job.get("current_cursor")
+        cursor = current_cursor if current_cursor is not None else job["start_time"]
         end_time = job["end_time"]
         total_records = job.get("records_fetched", 0)
 
@@ -176,13 +177,18 @@ class BackfillService:
                 return await self._fetch_oi(session, symbol, cursor, end_time)
             elif data_type == "lsr":
                 return await self._fetch_lsr(session, symbol, cursor, end_time)
+            else:
+                logger.error(
+                    f"Backfill job: unknown data_type={data_type!r}, "
+                    f"expected one of: kline, trade, funding, oi, lsr"
+                )
+                raise ValueError(f"Unsupported backfill data_type: {data_type!r}")
         except aiohttp.ClientResponseError as e:
             if e.status == 429:
                 retry_after = int(e.headers.get("Retry-After", "60"))
                 logger.warning(f"Rate limited, waiting {retry_after}s")
                 await asyncio.sleep(retry_after)
             raise
-        return [], cursor
 
     async def _fetch_klines(
         self, session, symbol, timeframe, cursor, end_time
