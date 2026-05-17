@@ -439,7 +439,29 @@ class CryptoDataSource(BaseDataSource):
             logger.error(f"Failed to fetch crypto K-lines {symbol}: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-        
+
+        # --- Futures fallback ------------------------------------------------
+        # Many alt-coin pairs (e.g. AIA/USDT) are listed on Binance *futures*
+        # but not on Binance *spot*.  The Poller writes data from fapi into the
+        # same DB table, so the DB-first path works.  But when we reach this
+        # CCXT path (because the DB data was insufficient), the default spot
+        # exchange returns nothing.  Transparently retry on Binance USD-M
+        # futures (binanceusdm) so the backtest still gets data.
+        if not klines and self.exchange.id == 'binance':
+            try:
+                futures_ds = CryptoDataSource.for_exchange('binance', 'swap')
+                klines = futures_ds.get_kline(
+                    symbol, timeframe, limit,
+                    before_time=before_time, after_time=after_time,
+                )
+                if klines:
+                    logger.info(
+                        f"[CryptoKline] {symbol} {timeframe}: spot returned 0, "
+                        f"futures fallback returned {len(klines)} candles"
+                    )
+            except Exception as fe:
+                logger.debug(f"[CryptoKline] futures fallback failed for {symbol}: {fe}")
+
         return klines
 
     @classmethod

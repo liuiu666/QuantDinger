@@ -1880,9 +1880,43 @@ class BacktestService:
                         symbol=symbol, timeframe=timeframe,
                         start_time=start_ms, end_time=end_ms, limit=limit,
                     )
-                    if kline_data and len(kline_data) < limit * 0.5:
-                        kline_data = None  # Insufficient data, fall back
-                except Exception:
+                    # --- Smart DB-data acceptance -------------------------------
+                    # Old logic: len(kline_data) < limit * 0.5 → discard.
+                    # Problem: the Poller typically only stores the last few hours
+                    # of 1m candles (360 bars for 6 h), but a 30-day backtest
+                    # needs ~43 200 bars.  The row-count ratio (0.5) is almost
+                    # never met, so DB data gets thrown away every time.
+                    #
+                    # New logic: compute *time coverage* — if the DB data spans
+                    # at least 40% of the requested window we accept it.
+                    # Even a partial DB result is better than falling back to
+                    # an exchange that doesn't list the pair at all.
+                    if kline_data and len(kline_data) >= 2:
+                        db_start = kline_data[0]['time']  # seconds
+                        db_end = kline_data[-1]['time']   # seconds
+                        req_start = int(after_time) if after_time else db_start
+                        req_end = int(before_time) if before_time else db_end
+                        req_span = max(1, req_end - req_start)
+                        db_span = db_end - db_start
+                        coverage = db_span / req_span
+                        # Accept if covers >= 40% of the requested window,
+                        # OR if we have at least 200 bars (even short windows).
+                        if coverage >= 0.4 or len(kline_data) >= 200:
+                            logger.info(
+                                f"[BacktestDB] {symbol} {timeframe}: accepted {len(kline_data)} "
+                                f"DB candles, coverage={coverage*100:.1f}% "
+                                f"(db_range={db_start}~{db_end}, req_range={req_start}~{req_end})"
+                            )
+                        else:
+                            logger.info(
+                                f"[BacktestDB] {symbol} {timeframe}: DB has {len(kline_data)} candles "
+                                f"but coverage={coverage*100:.1f}% < 40%, falling back to API"
+                            )
+                            kline_data = None
+                    elif kline_data and len(kline_data) < 2:
+                        kline_data = None
+                except Exception as e:
+                    logger.debug(f"[BacktestDB] get_klines failed: {e}")
                     kline_data = None
 
             if not kline_data:
