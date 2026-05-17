@@ -53,6 +53,28 @@ class KlineService:
                 # logger.info(f"命中缓存: {cache_key}")
                 return cached
         
+        # Crypto market: try local DB first (DB-first strategy)
+        if market and market.lower() == "crypto":
+            try:
+                from app.services.market_data.service import get_market_data_service
+                md_service = get_market_data_service()
+                db_klines = md_service.get_klines_with_fallback(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=limit,
+                    before_time=before_time,
+                    market=market,
+                    exchange_id=exchange_id,
+                    market_type=market_type,
+                )
+                if db_klines:
+                    if not before_time:
+                        ttl = self.cache_ttl.get(timeframe, 300)
+                        self.cache.set(cache_key, db_klines, ttl)
+                    return db_klines
+            except Exception as _e:
+                logger.debug(f"DB-first kline fallback to API: {_e}")
+
         # 获取数据
         klines = DataSourceFactory.get_kline(
             market=market,

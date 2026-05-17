@@ -1868,14 +1868,32 @@ class BacktestService:
         # backtest with a clear `mtfFallbackReason='data_unavailable'`, which is
         # far friendlier than bubbling up a 500.
         try:
-            kline_data = DataSourceFactory.get_kline(
-                market=market,
-                symbol=symbol,
-                timeframe=timeframe,
-                limit=limit,
-                before_time=before_time,
-                after_time=after_time,
-            )
+            # DB-first: try local PostgreSQL for Crypto market data
+            kline_data = None
+            if market and market.lower() == "crypto":
+                try:
+                    from app.services.market_data.service import get_market_data_service
+                    md_service = get_market_data_service()
+                    start_ms = int(after_time * 1000) if after_time else None
+                    end_ms = int(before_time * 1000) if before_time else None
+                    kline_data = md_service.get_klines(
+                        symbol=symbol, timeframe=timeframe,
+                        start_time=start_ms, end_time=end_ms, limit=limit,
+                    )
+                    if kline_data and len(kline_data) < limit * 0.5:
+                        kline_data = None  # Insufficient data, fall back
+                except Exception:
+                    kline_data = None
+
+            if not kline_data:
+                kline_data = DataSourceFactory.get_kline(
+                    market=market,
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=limit,
+                    before_time=before_time,
+                    after_time=after_time,
+                )
         except Exception as exc:
             logger.warning(
                 f"DataSourceFactory.get_kline raised for {market}:{symbol} {timeframe} "

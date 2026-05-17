@@ -36,3 +36,7 @@ ib_insync>=0.9.86
 # SerpAPI - Google/Bing search scraper (free 100 requests/month)
 # google-search-results>=2.4.0
 alpaca-py>=0.30.0
+# WebSocket client for Binance real-time data streaming
+websockets>=12.0
+# Async HTTP client for backfill concurrent requests
+aiohttp>=3.9.0

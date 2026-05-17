@@ -29,6 +29,7 @@ def register_routes(app: Flask):
     from app.routes.quick_trade import quick_trade_bp
     from app.routes.experiment import experiment_bp
     from app.routes.policy import policy_bp
+    from app.routes.market_data import market_data_bp
     
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp, url_prefix='/api/auth')   # Auth routes
@@ -53,6 +54,9 @@ def register_routes(app: Flask):
     app.register_blueprint(quick_trade_bp, url_prefix='/api/quick-trade')
     app.register_blueprint(experiment_bp, url_prefix='/api/experiment')
     app.register_blueprint(policy_bp, url_prefix='/api/policy')
+
+    # Market Data — stored kline/trade/derivatives query + backfill + WS status
+    app.register_blueprint(market_data_bp, url_prefix='/api/market-data')
 
     # Agent Gateway (/api/agent/v1) — versioned, scoped surface for AI agents.
     # See docs/agent/AI_INTEGRATION_DESIGN.md.

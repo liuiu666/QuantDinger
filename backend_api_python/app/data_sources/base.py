@@ -71,7 +71,8 @@ class BaseDataSource(ABC):
         high: float,
         low: float,
         close: float,
-        volume: float
+        volume: float,
+        quote_volume: float = 0.0,
     ) -> Dict[str, Any]:
         """格式化单条K线数据"""
         return {
@@ -80,7 +81,8 @@ class BaseDataSource(ABC):
             'high': round(float(high), 4),
             'low': round(float(low), 4),
             'close': round(float(close), 4),
-            'volume': round(float(volume), 2)
+            'volume': round(float(volume), 2),
+            'quote_volume': round(float(quote_volume), 2),
         }
     
     def calculate_time_range(

@@ -237,8 +237,11 @@ class FastAnalysisService:
             return {"error": "Insufficient data"}
         
         try:
-            # Use tools' built-in calculation
-            raw_indicators = self.tools.calculate_technical_indicators(kline_data)
+            # Use tools' built-in calculation (best-effort; may not be available)
+            try:
+                raw_indicators = self.tools.calculate_technical_indicators(kline_data)
+            except (AttributeError, Exception):
+                raw_indicators = {}
             
             # Extract key values
             closes = [float(k.get("close", 0)) for k in kline_data if k.get("close")]

@@ -1168,6 +1168,117 @@ CREATE INDEX IF NOT EXISTS idx_agent_paper_orders_user ON qd_agent_paper_orders(
 CREATE INDEX IF NOT EXISTS idx_agent_paper_orders_token ON qd_agent_paper_orders(agent_token_id);
 
 -- =============================================================================
+-- 31. Market Data Storage (Binance Data Collection)
+-- =============================================================================
+
+-- 31.1 K线 (OHLCV) 数据
+CREATE TABLE IF NOT EXISTS qd_klines (
+    id BIGSERIAL,
+    symbol VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10) NOT NULL,
+    open_time BIGINT NOT NULL,
+    open DECIMAL(24,8),
+    high DECIMAL(24,8),
+    low DECIMAL(24,8),
+    close DECIMAL(24,8),
+    volume DECIMAL(24,8),
+    quote_volume DECIMAL(24,8) DEFAULT 0,
+    trades INTEGER DEFAULT 0,
+    is_final BOOLEAN DEFAULT TRUE,
+    source VARCHAR(20) DEFAULT 'rest',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(symbol, timeframe, open_time)
+);
+CREATE INDEX IF NOT EXISTS idx_klines_symbol_tf_time ON qd_klines(symbol, timeframe, open_time DESC);
+
+-- 31.2 逐笔成交数据
+CREATE TABLE IF NOT EXISTS qd_trades (
+    id BIGSERIAL,
+    symbol VARCHAR(20) NOT NULL,
+    trade_id BIGINT NOT NULL,
+    price DECIMAL(24,8) NOT NULL,
+    quantity DECIMAL(24,8) NOT NULL,
+    quote_quantity DECIMAL(24,8) DEFAULT 0,
+    buyer_is_maker BOOLEAN DEFAULT FALSE,
+    trade_time BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(symbol, trade_id)
+);
+CREATE INDEX IF NOT EXISTS idx_trades_symbol_time ON qd_trades(symbol, trade_time DESC);
+
+-- 31.3 订单簿快照
+CREATE TABLE IF NOT EXISTS qd_orderbook_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    snapshot_time BIGINT NOT NULL,
+    bids JSONB NOT NULL,
+    asks JSONB NOT NULL,
+    depth_levels INTEGER DEFAULT 20,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_orderbook_snapshots_symbol_time ON qd_orderbook_snapshots(symbol, snapshot_time DESC);
+
+-- 31.4 资金费率历史
+CREATE TABLE IF NOT EXISTS qd_funding_rates (
+    id BIGSERIAL,
+    symbol VARCHAR(20) NOT NULL,
+    funding_time BIGINT NOT NULL,
+    funding_rate DECIMAL(24,12) NOT NULL,
+    mark_price DECIMAL(24,8) DEFAULT 0,
+    index_price DECIMAL(24,8) DEFAULT 0,
+    source VARCHAR(20) DEFAULT 'rest',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(symbol, funding_time)
+);
+CREATE INDEX IF NOT EXISTS idx_funding_rates_symbol_time ON qd_funding_rates(symbol, funding_time DESC);
+
+-- 31.5 持仓量历史
+CREATE TABLE IF NOT EXISTS qd_open_interest_hist (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    snapshot_time BIGINT NOT NULL,
+    open_interest DECIMAL(24,8) NOT NULL,
+    open_interest_usd DECIMAL(24,8) DEFAULT 0,
+    source VARCHAR(20) DEFAULT 'rest',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(symbol, snapshot_time)
+);
+CREATE INDEX IF NOT EXISTS idx_oi_symbol_time ON qd_open_interest_hist(symbol, snapshot_time DESC);
+
+-- 31.6 多空比历史
+CREATE TABLE IF NOT EXISTS qd_long_short_ratio (
+    id BIGSERIAL,
+    symbol VARCHAR(20) NOT NULL,
+    snapshot_time BIGINT NOT NULL,
+    long_short_ratio DECIMAL(24,12) NOT NULL,
+    long_account DECIMAL(24,12) DEFAULT 0,
+    short_account DECIMAL(24,12) DEFAULT 0,
+    ratio_type VARCHAR(20) DEFAULT 'account',
+    source VARCHAR(20) DEFAULT 'rest',
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(symbol, ratio_type, snapshot_time)
+);
+CREATE INDEX IF NOT EXISTS idx_lsr_symbol_type_time ON qd_long_short_ratio(symbol, ratio_type, snapshot_time DESC);
+
+-- 31.7 回填任务
+CREATE TABLE IF NOT EXISTS qd_backfill_jobs (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    data_type VARCHAR(20) NOT NULL,
+    timeframe VARCHAR(10),
+    start_time BIGINT NOT NULL,
+    end_time BIGINT NOT NULL,
+    current_cursor BIGINT DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending',
+    records_fetched INTEGER DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_backfill_jobs_status ON qd_backfill_jobs(status);
+
+-- =============================================================================
 -- Completion Notice
 -- =============================================================================
 DO $$

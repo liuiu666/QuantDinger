@@ -49,6 +49,7 @@ class MarketDataCollector:
         self._finnhub_client = None
         self._ak = None
         self._crypto_metric_cache: Dict[str, Dict[str, Any]] = {}
+        self._md_service = None
         self._init_clients()
     
     def _init_clients(self):
@@ -69,6 +70,36 @@ class MarketDataCollector:
         except ImportError:
             logger.info("akshare not installed")
     
+    # ── DB-first helpers ─────────────────────────────────────────────
+
+    @staticmethod
+    def _to_db_symbol(symbol: str) -> str:
+        """BTC/USDT -> BTCUSDT"""
+        return symbol.replace("/", "").replace(":", "").upper()
+
+    @staticmethod
+    def _to_db_timeframe(timeframe: str) -> str:
+        """1D -> 1d"""
+        return timeframe.lower()
+
+    def _get_md_service(self):
+        """懒加载 MarketDataService 单例"""
+        if self._md_service is None:
+            from app.services.market_data.service import get_market_data_service
+            self._md_service = get_market_data_service()
+        return self._md_service
+
+    @staticmethod
+    def _kline_freshness_seconds(timeframe: str) -> int:
+        """K线新鲜度阈值（秒）"""
+        tf = timeframe.lower()
+        if tf in ("1m",): return 600
+        if tf in ("5m",): return 1800
+        if tf in ("15m",): return 3600
+        if tf in ("1h",): return 7200
+        if tf in ("4h",): return 28800
+        return 86400  # 1d and others
+
     def collect_all(
         self,
         market: str,
@@ -212,12 +243,47 @@ class MarketDataCollector:
     
     def _get_price(self, market: str, symbol: str) -> Optional[Dict[str, Any]]:
         """
-        获取实时价格 - 使用 kline_service (与自选列表一致)
+        获取实时价格
+
+        Crypto: MarketDataService (DB-first + API fallback)
+        其他市场: kline_service -> DataSourceFactory kline fallback
         """
+        # Crypto: 统一走 MarketDataService
+        if market == "Crypto":
+            try:
+                db_symbol = self._to_db_symbol(symbol)
+                svc = self._get_md_service()
+                klines = svc.get_klines_with_fallback(
+                    db_symbol, "1m", limit=2,
+                    market=market, max_age_seconds=300,
+                )
+                if klines and len(klines) > 0:
+                    latest = klines[-1]
+                    price = float(latest.get("close", 0))
+                    if price > 0:
+                        prev = klines[-2] if len(klines) > 1 else latest
+                        prev_close = float(prev.get("close", price))
+                        change = price - prev_close
+                        change_pct = (change / prev_close * 100) if prev_close > 0 else 0
+                        logger.info(f"MarketDataCollector: price for {db_symbol}: ${price}")
+                        return {
+                            "price": price,
+                            "change": round(change, 6),
+                            "changePercent": round(change_pct, 2),
+                            "high": float(latest.get("high", price)),
+                            "low": float(latest.get("low", price)),
+                            "open": float(latest.get("open", price)),
+                            "previousClose": prev_close,
+                            "source": "market_data_service",
+                        }
+            except Exception as e:
+                logger.debug(f"MarketDataCollector: Crypto price failed: {e}")
+            return None
+
+        # 非 Crypto 市场: kline_service (无变化)
         try:
             price_data = self.kline_service.get_realtime_price(market, symbol, force_refresh=True)
             if price_data and price_data.get('price', 0) > 0:
-                # 安全转换为 float，处理 None 值
                 def safe_float(val, default=0.0):
                     if val is None:
                         return default
@@ -271,8 +337,32 @@ class MarketDataCollector:
         self, market: str, symbol: str, timeframe: str, limit: int = 60
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        获取K线数据 - 使用 DataSourceFactory (与K线模块一致)
+        获取K线数据 — 统一走 MarketDataService (DB-first + API fallback + 自动回写DB)
+
+        Crypto: MarketDataService.get_klines_with_fallback() (带新鲜度检查)
+        其他市场: DataSourceFactory (无变化)
         """
+        if market == "Crypto":
+            try:
+                db_symbol = self._to_db_symbol(symbol)
+                db_tf = self._to_db_timeframe(timeframe)
+                svc = self._get_md_service()
+                max_age = self._kline_freshness_seconds(timeframe)
+                klines = svc.get_klines_with_fallback(
+                    db_symbol, db_tf, limit=limit,
+                    market=market, max_age_seconds=max_age,
+                )
+                if klines and len(klines) > 0:
+                    logger.info(
+                        f"MarketDataCollector: kline for {db_symbol} {db_tf} "
+                        f"({len(klines)} rows)"
+                    )
+                    return klines
+            except Exception as e:
+                logger.warning(f"MarketDataCollector kline failed for {market}:{symbol}: {e}")
+            return None
+
+        # 非 Crypto 市场: DataSourceFactory (无变化)
         try:
             klines = DataSourceFactory.get_kline(market, symbol, timeframe, limit)
             if klines and len(klines) > 0:
@@ -1365,45 +1455,103 @@ class MarketDataCollector:
             "source": "",
         }
 
-        payload = self._coinglass_get("/api/futures/fundingRate/exchange-list", {"symbol": symbol}, ttl_sec=90)
-        latest = self._pick_latest_item(payload)
-        result["funding_rate"] = self._pick_number(latest or payload, "oi_weighted_funding_rate", "funding_rate", "fundingRate")
-        if result["funding_rate"] is not None:
-            result["source"] = "coinglass"
+        # --- DB-first: 逐字段从本地数据库读取 ---
+        db_symbol = f"{symbol}USDT"
+        now_ms = time.time() * 1000
+        try:
+            svc = self._get_md_service()
 
-        payload = self._coinglass_get("/api/futures/open-interest/exchange-list", {"symbol": symbol}, ttl_sec=90)
-        latest = self._pick_latest_item(payload)
-        result["open_interest"] = self._pick_number(
-            latest or payload,
-            "open_interest_usd",
-            "openInterestUsd",
-            "open_interest",
-            "openInterest",
-        )
-        result["open_interest_change_24h"] = self._pick_number(
-            latest or payload,
-            "open_interest_change_percent_24h",
-            "openInterestCh24h",
-            "openInterestChangePercent24h",
-            "open_interest_change_24h",
-        )
-        if result["open_interest"] is not None:
-            result["source"] = "coinglass"
+            # 资金费率 (新鲜度 2h)
+            fr_rows = svc.get_funding_rate_history(db_symbol, limit=2)
+            if fr_rows and len(fr_rows) > 0:
+                latest_fr = fr_rows[-1]
+                ft = latest_fr.get("funding_time", 0)
+                if ft and (now_ms - ft) < 2 * 3600 * 1000:
+                    rate = latest_fr.get("funding_rate")
+                    if rate is not None:
+                        result["funding_rate"] = float(rate)
+                        result["source"] = "local_db"
 
-        payload = self._coinglass_get(
-            "/api/futures/global-long-short-account-ratio/history",
-            {"symbol": symbol, "interval": "1d", "limit": 1},
-            ttl_sec=120,
-        )
-        latest = self._pick_latest_item(payload)
-        result["long_short_ratio"] = self._pick_number(
-            latest or payload,
-            "long_short_ratio",
-            "longShortRatio",
-            "global_account_long_short_ratio",
-        )
-        if result["long_short_ratio"] is not None:
-            result["source"] = "coinglass"
+            # OI (新鲜度 1h)
+            oi_rows = svc.get_open_interest_history(db_symbol, limit=2)
+            if oi_rows and len(oi_rows) > 0:
+                latest_oi = oi_rows[-1]
+                st = latest_oi.get("snapshot_time", 0)
+                if st and (now_ms - st) < 3600 * 1000:
+                    oi_val = latest_oi.get("open_interest_usd") or latest_oi.get("open_interest")
+                    if oi_val is not None:
+                        result["open_interest"] = float(oi_val)
+                        if not result["source"]:
+                            result["source"] = "local_db"
+                    # 计算 OI 变化率
+                    if len(oi_rows) >= 2:
+                        prev_oi = oi_rows[-2].get("open_interest_usd") or oi_rows[-2].get("open_interest")
+                        if oi_val and prev_oi and float(prev_oi) > 0:
+                            result["open_interest_change_24h"] = round((float(oi_val) - float(prev_oi)) / float(prev_oi) * 100, 4)
+
+            # 多空比 (新鲜度 2h)
+            lsr_rows = svc.get_long_short_history(db_symbol, ratio_type="account", limit=2)
+            if lsr_rows and len(lsr_rows) > 0:
+                latest_lsr = lsr_rows[-1]
+                lt = latest_lsr.get("snapshot_time", 0)
+                if lt and (now_ms - lt) < 2 * 3600 * 1000:
+                    ratio = latest_lsr.get("long_short_ratio")
+                    if ratio is not None:
+                        result["long_short_ratio"] = float(ratio)
+                        if not result["source"]:
+                            result["source"] = "local_db"
+        except Exception as e:
+            logger.debug(f"MarketDataCollector: DB derivatives query failed: {e}")
+
+        # 如果 DB 数据完整，跳过外部 API
+        if all(result.get(k) is not None for k in ("funding_rate", "open_interest", "long_short_ratio")):
+            logger.info(f"MarketDataCollector: derivatives all from local DB for {db_symbol}")
+            return result
+
+        # --- Fallback: 外部 API 补缺字段 ---
+        if result["funding_rate"] is None:
+            payload = self._coinglass_get("/api/futures/fundingRate/exchange-list", {"symbol": symbol}, ttl_sec=90)
+            latest = self._pick_latest_item(payload)
+            result["funding_rate"] = self._pick_number(latest or payload, "oi_weighted_funding_rate", "funding_rate", "fundingRate")
+            if result["funding_rate"] is not None:
+                result["source"] = "coinglass"
+
+        if result["open_interest"] is None:
+            payload = self._coinglass_get("/api/futures/open-interest/exchange-list", {"symbol": symbol}, ttl_sec=90)
+            latest = self._pick_latest_item(payload)
+            result["open_interest"] = self._pick_number(
+                latest or payload,
+                "open_interest_usd",
+                "openInterestUsd",
+                "open_interest",
+                "openInterest",
+            )
+            if result["open_interest_change_24h"] is None:
+                result["open_interest_change_24h"] = self._pick_number(
+                    latest or payload,
+                    "open_interest_change_percent_24h",
+                    "openInterestCh24h",
+                    "openInterestChangePercent24h",
+                    "open_interest_change_24h",
+                )
+            if result["open_interest"] is not None:
+                result["source"] = "coinglass"
+
+        if result["long_short_ratio"] is None:
+            payload = self._coinglass_get(
+                "/api/futures/global-long-short-account-ratio/history",
+                {"symbol": symbol, "interval": "1d", "limit": 1},
+                ttl_sec=120,
+            )
+            latest = self._pick_latest_item(payload)
+            result["long_short_ratio"] = self._pick_number(
+                latest or payload,
+                "long_short_ratio",
+                "longShortRatio",
+                "global_account_long_short_ratio",
+            )
+            if result["long_short_ratio"] is not None:
+                result["source"] = "coinglass"
 
         # Binance 作为部分衍生品字段兜底。
         if result["funding_rate"] is None or result["open_interest"] is None or result["long_short_ratio"] is None:

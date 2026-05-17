@@ -396,6 +396,37 @@ def create_app(config_name='default'):
         except Exception:
             pass
         restore_running_strategies()
-    
+
+        # Market Data — WebSocket streaming + historical backfill (opt-in via env).
+        try:
+            import os as _os
+            if _os.environ.get('ENABLE_MARKET_DATA_WS', 'false').lower() == 'true':
+                from app.services.market_data.ws_manager import WSManager
+                _ws_manager = WSManager()
+                _ws_manager.start()
+                app.extensions['ws_manager'] = _ws_manager
+        except Exception as _e:
+            logger.warning(f"Market Data WS startup note: {_e}")
+
+        try:
+            import os as _os
+            if _os.environ.get('ENABLE_MARKET_DATA_BACKFILL', 'false').lower() == 'true':
+                from app.services.market_data.backfill import BackfillService
+                _backfill = BackfillService()
+                _backfill.start()
+        except Exception as _e:
+            logger.warning(f"Backfill worker startup note: {_e}")
+
+        # Market Data — Scheduled REST poller for klines, funding, OI, L/S ratio
+        try:
+            import os as _os
+            if _os.environ.get('ENABLE_MARKET_DATA_POLLER', 'false').lower() == 'true':
+                from app.services.market_data.poller import ScheduledPoller
+                _poller = ScheduledPoller()
+                _poller.start()
+                app.extensions['poller'] = _poller
+        except Exception as _e:
+            logger.warning(f"Scheduled poller startup note: {_e}")
+
     return app
 

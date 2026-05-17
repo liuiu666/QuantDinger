@@ -294,14 +294,14 @@ class FuturesDataSource(BaseDataSource):
             for v in values:
                 try:
                     dt = datetime.fromisoformat(v["datetime"])
-                    klines.append({
-                        "time": int(dt.timestamp()),
-                        "open": float(v["open"]),
-                        "high": float(v["high"]),
-                        "low": float(v["low"]),
-                        "close": float(v["close"]),
-                        "volume": float(v.get("volume") or 0),
-                    })
+                    klines.append(self.format_kline(
+                        timestamp=int(dt.timestamp()),
+                        open_price=v["open"],
+                        high=v["high"],
+                        low=v["low"],
+                        close=v["close"],
+                        volume=v.get("volume") or 0,
+                    ))
                 except Exception:
                     continue
             klines.sort(key=lambda x: x["time"])
@@ -342,14 +342,14 @@ class FuturesDataSource(BaseDataSource):
 
             klines = []
             for index, row in df.iterrows():
-                klines.append({
-                    'time': int(index.timestamp()),
-                    'open': float(row['Open']),
-                    'high': float(row['High']),
-                    'low': float(row['Low']),
-                    'close': float(row['Close']),
-                    'volume': float(row['Volume']),
-                })
+                klines.append(self.format_kline(
+                    timestamp=int(index.timestamp()),
+                    open_price=row['Open'],
+                    high=row['High'],
+                    low=row['Low'],
+                    close=row['Close'],
+                    volume=row['Volume'],
+                ))
 
             klines.sort(key=lambda x: x['time'])
             if len(klines) > limit:
@@ -398,14 +398,14 @@ class FuturesDataSource(BaseDataSource):
                 if dt_str.endswith("Z"):
                     dt_str = dt_str[:-1] + "+00:00"
                 dt = datetime.fromisoformat(dt_str)
-                klines.append({
-                    "time": int(dt.timestamp()),
-                    "open": float(item.get("open", 0)),
-                    "high": float(item.get("high", 0)),
-                    "low": float(item.get("low", 0)),
-                    "close": float(item.get("close", 0)),
-                    "volume": 0.0,
-                })
+                klines.append(self.format_kline(
+                    timestamp=int(dt.timestamp()),
+                    open_price=item.get("open", 0),
+                    high=item.get("high", 0),
+                    low=item.get("low", 0),
+                    close=item.get("close", 0),
+                    volume=0.0,
+                ))
             klines.sort(key=lambda x: x["time"])
             if len(klines) > limit:
                 klines = klines[-limit:]
@@ -449,14 +449,15 @@ class FuturesDataSource(BaseDataSource):
             # 转换格式
             klines = []
             for candle in ohlcv:
-                klines.append({
-                    'time': int(candle[0] / 1000),
-                    'open': float(candle[1]),
-                    'high': float(candle[2]),
-                    'low': float(candle[3]),
-                    'close': float(candle[4]),
-                    'volume': float(candle[5])
-                })
+                klines.append(self.format_kline(
+                    timestamp=int(candle[0] / 1000),
+                    open_price=candle[1],
+                    high=candle[2],
+                    low=candle[3],
+                    close=candle[4],
+                    volume=candle[5],
+                    quote_volume=float(candle[7]) if len(candle) > 7 else 0.0,
+                ))
             
             # logger.info(f"获取到 {len(klines)} 条加密货币期货数据")
             return klines

@@ -406,7 +406,8 @@ class CryptoDataSource(BaseDataSource):
                     high=candle[2],
                     low=candle[3],
                     close=candle[4],
-                    volume=candle[5]
+                    volume=candle[5],
+                    quote_volume=float(candle[7]) if len(candle) > 7 else 0.0,
                 ))
             
             # 过滤和限制（回测带 after_time 时保留整段窗口，避免 [-limit:] 丢掉左端历史）

@@ -294,6 +294,9 @@ body.dark .ant-modal-wrap .ant-alert{background:rgba(24,144,255,.06);border-colo
 .theme-dark .bp-form-helper[data-v-b5ad7636]{background:rgba(24,144,255,.08)}
 .crypto-card-title-icon[data-v-133fd0e1]{color:#1890ff}
 .crypto-item[data-v-133fd0e1]:hover{border-color:rgba(24,144,255,.4)}
+.stat-card.stat-blue .stat-icon[data-v-6d5987a2]{background:rgba(24,144,255,.1);color:#1890ff}
+.stat-card.stat-blue .stat-value[data-v-6d5987a2]{color:#1890ff}
+.status-card .ws-icon[data-v-6d5987a2]{color:#1890ff}
 .fast-analysis-report .loading-container .loading-content-pro .loading-header .loading-icon-pro[data-v-34e79cae]{color:var(--primary-color,#1890ff)}
 .fast-analysis-report .loading-container .loading-content-pro .progress-wrapper .progress-text[data-v-34e79cae]{color:var(--primary-color,#1890ff)}
 .fast-analysis-report .loading-container .loading-content-pro .current-step[data-v-34e79cae]{background:color-mix(in srgb,var(--primary-color,#1890ff) 6%,transparent);color:var(--primary-color,#1890ff)}
@@ -433,11 +436,11 @@ body.dark .usdt-checkout .checkout-body .info-section .addr-box .copy-btn:hover,
 .settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-form-item-label .form-label-with-tooltip .api-link:hover{background:rgba(24,144,255,.25)}
 .settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input-number:focus,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input-number:hover,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input-password:focus,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input-password:hover,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input:focus,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-input:hover,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-select-selection:focus,.settings-page.theme-dark .settings-form[data-v-7808b8bc] .ant-select-selection:hover{border-color:#1890ff}
 .turnstile-container .turnstile-error a[data-v-20437450]{color:#1890ff}
-.main .login-method-switch a[data-v-de9678f6]:hover{color:#1890ff}
-.main .login-method-switch a.active[data-v-de9678f6]{color:#1890ff;border-bottom-color:#1890ff}
-.main .code-login-hint .anticon[data-v-de9678f6]{color:#1890ff}
-.main .auth-links a[data-v-de9678f6]{color:#1890ff}
-.main .legal-wrap .legal-toggle[data-v-de9678f6]{color:#1890ff}
+.main .login-method-switch a[data-v-0665f445]:hover{color:#1890ff}
+.main .login-method-switch a.active[data-v-0665f445]{color:#1890ff;border-bottom-color:#1890ff}
+.main .code-login-hint .anticon[data-v-0665f445]{color:#1890ff}
+.main .auth-links a[data-v-0665f445]{color:#1890ff}
+.main .legal-wrap .legal-toggle[data-v-0665f445]{color:#1890ff}
 .ant-dropdown-menu-item-selected,.ant-dropdown-menu-item-selected>a,.ant-dropdown-menu-submenu-title-selected,.ant-dropdown-menu-submenu-title-selected>a{color:#1890ff;background-color:#e6f7ff}
 .ant-dropdown-menu-item:hover,.ant-dropdown-menu-submenu-title:hover{background-color:#e6f7ff}
 .ant-dropdown-menu-submenu-selected .ant-dropdown-menu-submenu-title{color:#1890ff}
